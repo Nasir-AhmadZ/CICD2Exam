@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.database import engine, SessionLocal
-from app.models import Base
+from app.models import Base, AuthorDB, BookDB
 from app.schemas import AuthorCreate, AuthorRead  
 
 @asynccontextmanager
@@ -58,3 +58,27 @@ def create_author(author:AuthorCreate,db:Session=Depends(get_db)):
     return author
 
 @app.get("/api/authors", response_model=list[AuthorRead])
+def list_authors(db:Session=Depends(get_db)):
+    stmt=select(AuthorDB).order_by(AuthorDB.id)
+    result = db.execute(stmt)
+    authors = result.scalars().all()
+    return authors
+
+@app.get("/api/authors/{author_id}",response_model=AuthorRead)
+def get_author(db:Session=Depends(get_db)):
+    author=db.get(AuthorDB,author_id)
+    if not author:
+        raise HTTPException(status_code=404,detail="Author not found")
+    return author
+
+@app.put("/api/authors/{author_id}",response_model=AuthorRead)
+def update_author(payload:AuthorCreate,db:Session=Depends(get_db)):
+    author=db.get(AuthorDB,author_id)
+    if not author:
+        raise HTTPException(status_code=404,detail="Author not found")
+    
+    for key, value in payload.model_dump().items():
+        setattr(author,key,value)
+    commit_or_rollback(db,"author update failed")
+    db.refresh(author)
+    return author
