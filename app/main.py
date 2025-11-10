@@ -3,7 +3,7 @@ from typing import Optional
 
 from contextlib import asynccontextmanager
 from typing import List, Optional
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Response
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.database import engine, SessionLocal
 from app.models import Base, AuthorDB, BookDB
-from app.schemas import AuthorCreate, AuthorRead  
+from app.schemas import AuthorCreate, AuthorRead, AuthorPATCH
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,10 +49,9 @@ def health():
 @app.post("/api/authors", response_model=AuthorRead)
 def create_author(author:AuthorCreate,db:Session=Depends(get_db)):
     author = AuthorDB(
-        name=author.name
-        email=author.email
-        year_started=author.year_started
-    )
+        name=author.name,
+        email=author.email,
+        year_started=author.year_started)
     db.add(author)
     commit_or_rollback(db,"Author creation failed")
     return author
@@ -81,4 +80,26 @@ def update_author(payload:AuthorCreate,db:Session=Depends(get_db)):
         setattr(author,key,value)
     commit_or_rollback(db,"author update failed")
     db.refresh(author)
-    return author
+    return author 
+
+@app.patch("/api/authors/{author_id}",response_model=AuthorPATCH,status_code=status.HTTP_201_CREATED)
+def patch_author(payload:AuthorPATCH,db:Session=Depends(get_db)):
+    author=db.get(AuthorDB,author_id)
+    if not author:
+        raise HTTPException(status_code=404,detail="Author not found")
+    
+    for key, value in payload.model_dump().items():
+        setattr(author,key,value)
+    commit_or_rollback(db,"author PATCH failed")
+    db.refresh(author)
+    return author  
+
+'''@app.delete("/api/authors/{author_id}",status_code=204)
+def delete_author(author_id:int,db:Session=Depends())->Response:
+    author=db.get(AuthorDB,author_id)
+    if not author:
+        raise HTTPException(status_code=404,detail="Author not found")
+    db.delete(author)
+    db.commit()
+    return Response(status=201)'''
+
